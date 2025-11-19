@@ -17,24 +17,48 @@
   </div>
 
   <script>
-    // Get the auth tokens from the hash (sent by Supabase)
+    // Get all params from hash and search
     const hash = window.location.hash.substring(1);
-    const params = new URLSearchParams(hash);
-    const accessToken = params.get('access_token');
-    const refreshToken = params.get('refresh_token');
-    const type = params.get('type');
-    const extensionId = new URLSearchParams(window.location.search).get('ext');
+    const search = window.location.search.substring(1);
+    const hashParams = new URLSearchParams(hash);
+    const searchParams = new URLSearchParams(search);
+    const extensionId = searchParams.get('ext');
 
-    console.log('Redirect params - Token:', !!accessToken, 'Type:', type, 'Ext ID:', extensionId);
+    // Check for email verification (has access_token)
+    const accessToken = hashParams.get('access_token') || searchParams.get('access_token');
+    const refreshToken = hashParams.get('refresh_token') || searchParams.get('refresh_token');
+    const type = hashParams.get('type') || searchParams.get('type');
 
-    if (accessToken && extensionId) {
-      // Build the extension URL with all the auth tokens
+    // Check for OAuth callback (has code)
+    const code = hashParams.get('code') || searchParams.get('code');
+
+    console.log('Redirect params - AccessToken:', !!accessToken, 'Code:', !!code, 'Ext ID:', extensionId);
+
+    if (!extensionId) {
+      document.querySelector('p').textContent = 'Error: Missing extension ID. Please try again.';
+      console.error('Missing extension ID');
+    } else if (accessToken) {
+      // Email verification flow
       const extensionUrl = `chrome-extension://${extensionId}/src/popup/auth-callback.html#access_token=${accessToken}&refresh_token=${refreshToken || ''}&type=${type || ''}`;
-      console.log('Redirecting to extension...');
+      console.log('Redirecting to extension with tokens...');
+      window.location.href = extensionUrl;
+    } else if (code) {
+      // OAuth callback flow - send code to extension
+      console.log('OAuth callback received, sending code to extension...');
+      const extensionUrl = `chrome-extension://${extensionId}/src/popup/auth-callback.html?code=${code}`;
+      
+      // Also try to send message to extension in case it's listening
+      if (window.opener) {
+        window.opener.postMessage({
+          type: 'OAUTH_CALLBACK',
+          code: code
+        }, '*');
+      }
+      
       window.location.href = extensionUrl;
     } else {
       document.querySelector('p').textContent = 'Error: Missing authentication data. Please try signing up again.';
-      console.error('Missing required parameters:', { accessToken: !!accessToken, extensionId });
+      console.error('Missing required parameters:', { accessToken: !!accessToken, code: !!code, extensionId });
     }
   </script>
 </body>
